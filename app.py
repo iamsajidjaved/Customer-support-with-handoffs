@@ -1,50 +1,39 @@
-"""
-Customer Support State Machine Example
-
-This example demonstrates the state machine pattern.
-A single agent dynamically changes its behavior based on the current_step state,
-creating a state machine for sequential information collection.
-"""
-
 import os
+from typing import Literal
+from langchain.agents import AgentState
+from typing_extensions import NotRequired
+from langchain.tools import tool, ToolRuntime
+from langchain.messages import ToolMessage
+from langgraph.types import Command
+from typing import Callable
+from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
+from langchain.messages import HumanMessage
 import uuid
 
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import Command
-from typing import Callable, Literal
-from typing_extensions import NotRequired
+os.environ["GOOGLE_API_KEY"] = "AIzaSyBQK5kKMGueVaNF_uhbIgrt-pldW-VKN6Y"
 
-from langchain.agents import AgentState, create_agent
-from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse, SummarizationMiddleware
-from langchain.chat_models import init_chat_model
-from langchain.messages import HumanMessage, ToolMessage
-from langchain.tools import tool, ToolRuntime
-from langchain.chat_models import init_chat_model
-
-os.environ["GOOGLE_API_KEY"] = "AIzaSyAjpvQogqEYR6exkZJY8SPdNFXgYxHrHqA"
-model = init_chat_model("google_genai:gemini-3-flash-preview")
-
+model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 # Define the possible workflow steps
-SupportStep = Literal["warranty_collector", "issue_classifier", "resolution_specialist"]
+SupportStep = Literal["warranty_collector", "issue_classifier", "resolution_specialist"]  
 
-
-class SupportState(AgentState):
+class SupportState(AgentState):  
     """State for customer support workflow."""
-
-    current_step: NotRequired[SupportStep]
+    current_step: NotRequired[SupportStep]  
     warranty_status: NotRequired[Literal["in_warranty", "out_of_warranty"]]
     issue_type: NotRequired[Literal["hardware", "software"]]
-
 
 @tool
 def record_warranty_status(
     status: Literal["in_warranty", "out_of_warranty"],
     runtime: ToolRuntime[None, SupportState],
-) -> Command:
+) -> Command:  
     """Record the customer's warranty status and transition to issue classification."""
-    return Command(
-        update={
+    return Command(  
+        update={  
             "messages": [
                 ToolMessage(
                     content=f"Warranty status recorded as: {status}",
@@ -52,7 +41,7 @@ def record_warranty_status(
                 )
             ],
             "warranty_status": status,
-            "current_step": "issue_classifier",
+            "current_step": "issue_classifier",  
         }
     )
 
@@ -61,10 +50,10 @@ def record_warranty_status(
 def record_issue_type(
     issue_type: Literal["hardware", "software"],
     runtime: ToolRuntime[None, SupportState],
-) -> Command:
+) -> Command:  
     """Record the type of issue and transition to resolution specialist."""
-    return Command(
-        update={
+    return Command(  
+        update={  
             "messages": [
                 ToolMessage(
                     content=f"Issue type recorded as: {issue_type}",
@@ -72,7 +61,7 @@ def record_issue_type(
                 )
             ],
             "issue_type": issue_type,
-            "current_step": "resolution_specialist",
+            "current_step": "resolution_specialist",  
         }
     )
 
@@ -89,11 +78,10 @@ def provide_solution(solution: str) -> str:
     """Provide a solution to the customer's issue."""
     return f"Solution provided: {solution}"
 
-
-# Define prompts as constants
+# Define prompts as constants for easy reference
 WARRANTY_COLLECTOR_PROMPT = """You are a customer support agent helping with device issues.
 
-CURRENT STEP: Warranty verification
+CURRENT STAGE: Warranty verification
 
 At this step, you need to:
 1. Greet the customer warmly
@@ -104,7 +92,7 @@ Be conversational and friendly. Don't ask multiple questions at once."""
 
 ISSUE_CLASSIFIER_PROMPT = """You are a customer support agent helping with device issues.
 
-CURRENT STEP: Issue classification
+CURRENT STAGE: Issue classification
 CUSTOMER INFO: Warranty status is {warranty_status}
 
 At this step, you need to:
@@ -116,7 +104,7 @@ If unclear, ask clarifying questions before classifying."""
 
 RESOLUTION_SPECIALIST_PROMPT = """You are a customer support agent helping with device issues.
 
-CURRENT STEP: Resolution
+CURRENT STAGE: Resolution
 CUSTOMER INFO: Warranty status is {warranty_status}, issue type is {issue_type}
 
 At this step, you need to:
@@ -126,7 +114,6 @@ At this step, you need to:
    - If OUT OF WARRANTY: escalate_to_human for paid repair options
 
 Be specific and helpful in your solutions."""
-
 
 # Step configuration: maps step name to (prompt, tools, required_state)
 STEP_CONFIG = {
@@ -147,7 +134,6 @@ STEP_CONFIG = {
     },
 }
 
-
 @wrap_model_call
 def apply_step_config(
     request: ModelRequest,
@@ -155,27 +141,26 @@ def apply_step_config(
 ) -> ModelResponse:
     """Configure agent behavior based on the current step."""
     # Get current step (defaults to warranty_collector for first interaction)
-    current_step = request.state.get("current_step", "warranty_collector")
+    current_step = request.state.get("current_step", "warranty_collector")  
 
     # Look up step configuration
-    step_config = STEP_CONFIG[current_step]
+    stage_config = STEP_CONFIG[current_step]  
 
     # Validate required state exists
-    for key in step_config["requires"]:
+    for key in stage_config["requires"]:
         if request.state.get(key) is None:
             raise ValueError(f"{key} must be set before reaching {current_step}")
 
-    # Format prompt with state values
-    system_prompt = step_config["prompt"].format(**request.state)
+    # Format prompt with state values (supports {warranty_status}, {issue_type}, etc.)
+    system_prompt = stage_config["prompt"].format(**request.state)
 
     # Inject system prompt and step-specific tools
-    request = request.override(
-        system_prompt=system_prompt,
-        tools=step_config["tools"],
+    request = request.override(  
+        system_prompt=system_prompt,  
+        tools=stage_config["tools"],  
     )
 
     return handler(request)
-
 
 # Collect all tools from all step configurations
 all_tools = [
@@ -185,49 +170,53 @@ all_tools = [
     escalate_to_human,
 ]
 
-# Create the agent with step-based configuration and summarization
+# Create the agent with step-based configuration
 agent = create_agent(
     model,
     tools=all_tools,
-    state_schema=SupportState,
-    middleware=[
-        apply_step_config,
-        SummarizationMiddleware(
-            model="gpt-4o-mini",
-            trigger=("tokens", 4000),
-            keep=("messages", 10)
-        )
-    ],
-    checkpointer=InMemorySaver(),
+    state_schema=SupportState,  
+    middleware=[apply_step_config],  
+    checkpointer=InMemorySaver(),  
 )
 
+# Configuration for this conversation thread
+thread_id = str(uuid.uuid4())
+config = {"configurable": {"thread_id": thread_id}}
 
-# ============================================================================
-# Test the workflow
-# ============================================================================
+# Turn 1: Initial message - starts with warranty_collector step
+print("=== Turn 1: Warranty Collection ===")
+result = agent.invoke(
+    {"messages": [HumanMessage("Hi, my phone screen is cracked")]},
+    config
+)
+for msg in result['messages']:
+    msg.pretty_print()
 
-if __name__ == "__main__":
-    thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+# Turn 2: User responds about warranty
+print("\n=== Turn 2: Warranty Response ===")
+result = agent.invoke(
+    {"messages": [HumanMessage("Yes, it's still under warranty")]},
+    config
+)
+for msg in result['messages']:
+    msg.pretty_print()
+print(f"Current step: {result.get('current_step')}")
 
-    result = agent.invoke(
-        {"messages": [HumanMessage("Hi, my phone screen is cracked")]},
-        config
-    )
+# Turn 3: User describes the issue
+print("\n=== Turn 3: Issue Description ===")
+result = agent.invoke(
+    {"messages": [HumanMessage("The screen is physically cracked from dropping it")]},
+    config
+)
+for msg in result['messages']:
+    msg.pretty_print()
+print(f"Current step: {result.get('current_step')}")
 
-    result = agent.invoke(
-        {"messages": [HumanMessage("Yes, it's still under warranty")]},
-        config
-    )
-
-    result = agent.invoke(
-        {"messages": [HumanMessage("The screen is physically cracked from dropping it")]},
-        config
-    )
-
-    result = agent.invoke(
-        {"messages": [HumanMessage("What should I do?")]},
-        config
-    )
-    for msg in result['messages']:
-        msg.pretty_print()
+# Turn 4: Resolution
+print("\n=== Turn 4: Resolution ===")
+result = agent.invoke(
+    {"messages": [HumanMessage("What should I do?")]},
+    config
+)
+for msg in result['messages']:
+    msg.pretty_print()
