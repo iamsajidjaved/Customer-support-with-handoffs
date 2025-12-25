@@ -46,19 +46,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 # SECTION 2: CONFIGURATION & SETUP
 # ============================================================================
 
-# Check if Google API key is set in environment variables
-if "GOOGLE_API_KEY" not in os.environ and "GEMINI_API_KEY" not in os.environ:
-    print("=" * 60)
-    print("ERROR: Google API Key not found!")
-    print("=" * 60)
-    print("\nPlease set your Google API key using one of these methods:")
-    print("\n1. In PowerShell (temporary):")
-    print('   $env:GOOGLE_API_KEY = "your-api-key-here"')
-    print("\n2. In the code:")
-    print('   os.environ["GOOGLE_API_KEY"] = "your-api-key-here"')
-    print("\nGet your API key from: https://makersuite.google.com/app/apikey")
-    print("=" * 60)
-    sys.exit(1)
+os.environ["GOOGLE_API_KEY"] = "AIzaSyBQK5kKMGueVaNF_uhbIgrt-pldW-VKN6Y"
 
 # Initialize the Gemini model
 # This will be used to generate AI responses throughout the conversation
