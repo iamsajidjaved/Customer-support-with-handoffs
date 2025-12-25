@@ -14,7 +14,7 @@ from langchain.messages import HumanMessage
 import uuid
 
 # Note: Set your Google API key in the environment variable
-# os.environ["GOOGLE_API_KEY"] = "your-api-key-here"
+os.environ["GOOGLE_API_KEY"] = "AIzaSyBQK5kKMGueVaNF_uhbIgrt-pldW-VKN6Y"
 
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
@@ -215,7 +215,20 @@ if __name__ == "__main__":
             
             # Display only the last AI message
             last_message = result['messages'][-1]
-            print(f"\nAgent: {last_message.content}\n")
+            
+            # Extract text content from the message
+            if hasattr(last_message, 'content'):
+                content = last_message.content
+                # If content is a list of dicts (structured output), extract text
+                if isinstance(content, list):
+                    text_parts = [part.get('text', '') for part in content if part.get('type') == 'text']
+                    agent_response = ' '.join(text_parts)
+                else:
+                    agent_response = str(content)
+            else:
+                agent_response = str(last_message)
+            
+            print(f"\nAgent: {agent_response}\n")
             
             # Optionally show current step (for debugging)
             # print(f"[Current step: {result.get('current_step')}]\n")
