@@ -49,7 +49,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 os.environ["GOOGLE_API_KEY"] = "AIzaSyBQK5kKMGueVaNF_uhbIgrt-pldW-VKN6Y"
 
 # Initialize the Gemini model
-# This will be used to generate AI responses throughout the conversation
+# Using gemini-1.5-flash for better rate limits and stability
+# Note: gemini-2.5-flash has stricter rate limits on free tier
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 
@@ -394,4 +395,25 @@ if __name__ == "__main__":
 
         except Exception as e:
             # Handle and display any errors
-            print(f"\nError: {e}\n")
+            error_message = str(e)
+            
+            # Check if it's a rate limit error
+            if "RESOURCE_EXHAUSTED" in error_message or "429" in error_message:
+                print("\n⚠️  Rate Limit Exceeded")
+                print("─" * 60)
+                print("You've hit the API rate limit. This usually means:")
+                print("• Too many requests in a short time")
+                print("• Daily quota exceeded\n")
+                print("Solutions:")
+                print("1. Wait a minute and try again")
+                print("2. Use a different API key")
+                print("3. Upgrade to a paid plan for higher limits")
+                print("─" * 60 + "\n")
+            elif "PERMISSION_DENIED" in error_message or "403" in error_message:
+                print("\n⚠️  API Key Issue")
+                print("─" * 60)
+                print("Your API key may be invalid or restricted.")
+                print("Please check your API key and try again.")
+                print("─" * 60 + "\n")
+            else:
+                print(f"\n❌ Error: {error_message}\n")
